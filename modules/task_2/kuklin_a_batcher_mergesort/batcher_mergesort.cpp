@@ -3,6 +3,7 @@
 #include <omp.h>
 #include <algorithm>
 #include <vector>
+#include <iostream>
 #include <random>
 
 using vector_d = std::vector<double>;
@@ -19,21 +20,27 @@ vector_d getRandVec(size_t vec_size, double lower_bound, double upper_bound) {
   return vec;
 }
 
-std::vector<vector_d> genDigitCounters(vector_d* source_vec, size_t elem_num) {
-  std::vector<vector_d> digitCounters(256);
+void genDigitCounters(vector_d* source_vec, size_t elem_num) {
+  std::vector<vector_d> digitCounters(bv);
   int index_sv = 0;
   int curr_byte = 0;
 
-  for (size_t byte_num = 0; byte_num < sizeof(double); ++byte_num) {
+  size_t byte_num = 0;
+
+  for (int i = 0; i < 256; ++i) {
+    digitCounters[i].reserve(source_vec->size() / 8);
+  }
+
+  for (; byte_num < sizeof(double) - 1; ++byte_num) {
     for (size_t elem_ind = 0; elem_ind < elem_num; ++elem_ind) {
       curr_byte = static_cast<int>(
-          *((unsigned char*)&(*source_vec)[elem_ind] + byte_num));
+          *(reinterpret_cast<unsigned char*>(source_vec->data() + elem_ind) +
+            byte_num));
       digitCounters[curr_byte].push_back((*source_vec)[elem_ind]);
     }
-
     size_t count_size = 0;
     for (size_t i = 0; i < bv; ++i) {
-      if (!digitCounters.empty()) {
+      if (!digitCounters[i].empty()) {
         count_size = digitCounters[i].size();
         for (size_t j = 0; j < count_size; ++j) {
           (*source_vec)[index_sv++] = digitCounters[i][j];
@@ -44,10 +51,35 @@ std::vector<vector_d> genDigitCounters(vector_d* source_vec, size_t elem_num) {
     index_sv = 0;
   }
 
-  return digitCounters;
+  for (size_t elem_ind = 0; elem_ind < elem_num; ++elem_ind) {
+    curr_byte = static_cast<int>(
+        *(reinterpret_cast<unsigned char*>(source_vec->data() + elem_ind) +
+          byte_num));
+    digitCounters[curr_byte].push_back((*source_vec)[elem_ind]);
+  }
+  size_t count_size = 0;
+  for (size_t i = bv - 1; i >= bv / 2; --i) {
+    if (!digitCounters[i].empty()) {
+      count_size = digitCounters[i].size();
+      for (size_t k = count_size - 1; k >= 1; --k) {
+        (*source_vec)[index_sv++] = digitCounters[i][k];
+      }
+      (*source_vec)[index_sv++] = digitCounters[i][0];
+    }
+  }
+  for (size_t i = 0; i < bv / 2; ++i) {
+    if (!digitCounters[i].empty()) {
+      count_size = digitCounters[i].size();
+      for (size_t j = 0; j < count_size; ++j) {
+        (*source_vec)[index_sv++] = digitCounters[i][j];
+      }
+    }
+  }
+
 }
 
-void radixPass(vector_d* source_vec, const std::vector<vector_d>& digitCounters) {
+void radixPass(vector_d* source_vec,
+               const std::vector<vector_d>& digitCounters) {
   size_t index_v = 0;
   size_t count_size = 0;
 
@@ -74,15 +106,8 @@ void radixPass(vector_d* source_vec, const std::vector<vector_d>& digitCounters)
 void floatRadixSort(vector_d* source_vec) {
   size_t elem_num = source_vec->size();
 
-  auto digitCounters = genDigitCounters(source_vec, elem_num);
+  genDigitCounters(source_vec, elem_num);
 
-  int count_index = 0;
-  for (size_t i = 0; i < elem_num; ++i) {
-    count_index = static_cast<int>(*((unsigned char*)&(*source_vec)[i] + 7));
-    digitCounters[count_index].push_back((*source_vec)[i]);
-  }
-
-  radixPass(source_vec, digitCounters);
 }
 
 void evenSplitter(vector_d* res_vec, const vector_d& first_vec,
@@ -165,9 +190,13 @@ vector_d batcherMerge(const vector_d& first_vec, const vector_d& second_vec) {
   auto first_size = first_vec.size();
   auto second_size = second_vec.size();
   vector_d res_vec(first_size + second_size);
-
-  evenSplitter(&res_vec, first_vec, second_vec);
-  oddSplitter(&res_vec, first_vec, second_vec);
+#pragma omp parallel
+  {
+#pragma omp single nowait
+    evenSplitter(&res_vec, first_vec, second_vec);
+#pragma omp single nowait
+    oddSplitter(&res_vec, first_vec, second_vec);
+  }
   batcherComparator(&res_vec);
 
   return res_vec;
@@ -198,6 +227,7 @@ void floatRadixSortParallel(vector_d* source_vec) {
   int mergeCount = threadNum >> 1;
 
   while (mergeCount) {
+#pragma omp parallel for
     for (int i = 0; i < mergeCount; ++i) {
       vec_segments[i] =
           batcherMerge(vec_segments[i], vec_segments[totalNum - 1 - i]);
@@ -207,4 +237,30 @@ void floatRadixSortParallel(vector_d* source_vec) {
   }
 
   *source_vec = vec_segments[0];
+}
+
+vector_d floatRadixSortParalel(std::vector<vector_d>* vec_segments) {
+  auto threadNum = omp_get_num_procs();
+
+#pragma omp parallel num_threads(threadNum)
+  {
+    auto currNumThread = omp_get_thread_num();
+
+    floatRadixSort(&(*vec_segments)[currNumThread]);
+  }
+
+  int totalNum = threadNum;
+  int mergeCount = threadNum >> 1;
+
+  while (mergeCount) {
+#pragma omp parallel for
+    for (int i = 0; i < mergeCount; ++i) {
+      (*vec_segments)[i] =
+          batcherMerge((*vec_segments)[i], (*vec_segments)[totalNum - 1 - i]);
+    }
+    totalNum -= mergeCount;
+    mergeCount = totalNum >> 1;
+  }
+
+  return (*vec_segments)[0];
 }

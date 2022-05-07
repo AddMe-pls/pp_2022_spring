@@ -1,6 +1,7 @@
 // Copyright 2022 Kuklin Andrey
 #include <gtest/gtest.h>
 #include <omp.h>
+#include <iostream>
 #include "./batcher_mergesort.h"
 
 TEST(kuklin_a_betcher_mergesort, genRandVec) {
@@ -117,15 +118,13 @@ TEST(kuklin_a_betcher_mergesort, correct_merge_4_vec) {
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort) {
-  vector_d vec = {3.1, 7.2, -5.1,   -6.56, -1.345, 10.567,
-                  3.5, 2.2, -14.46, -10.,  -11.5,  21.43};
+  auto vec = getRandVec(12, -100., 100.);
 
   ASSERT_NO_THROW(floatRadixSortParallel(&vec));
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v1) {
-  vector_d seq_vec = {4.1, 3.2, -1.1,   -2.56, -41.345, 30.567,
-                      5.5, 6.2, -44.46, -70.5, -31.5,   61.43};
+  auto seq_vec = getRandVec(17, -150., 150.);
   vector_d par_vec = seq_vec;
 
   floatRadixSort(&seq_vec);
@@ -135,8 +134,7 @@ TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v1) {
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v2) {
-  vector_d seq_vec = {6.1,  7.2, -3.1,   -8.56, -17.345, 25.567,
-                      53.5, 4.2, -14.46, -60.5, -24.5,   28.43};
+  auto seq_vec = getRandVec(21, -200., 200.);
   vector_d par_vec = seq_vec;
 
   floatRadixSort(&seq_vec);
@@ -146,8 +144,7 @@ TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v2) {
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v3) {
-  vector_d seq_vec = {1.1,  0.2,  -5.1,  -68.56, -47.345, 5.567,
-                      63.5, 24.2, -4.46, -67.5,  -22.5,   23.43};
+  auto seq_vec = getRandVec(39, -240., 240.);
   vector_d par_vec = seq_vec;
 
   floatRadixSort(&seq_vec);
@@ -157,13 +154,45 @@ TEST(kuklin_a_betcher_mergesort, parallel_sort_eq_sequence_v3) {
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort_faster_sequence) {
-  auto seq_vec = getRandVec(100000, -100., 100.);
+  auto seq_vec = getRandVec(1000, -100., 100.);
   vector_d par_vec = seq_vec;
 
   floatRadixSort(&seq_vec);
   floatRadixSortParallel(&par_vec);
 
   ASSERT_EQ(seq_vec, par_vec);
+}
+
+TEST(kuklin_a_betcher_mergesort, parallel_sort_faster_sequence_vers) {
+  auto seq_vec = getRandVec(90000000, -100., 100.);
+  auto threadNum = omp_get_num_procs();
+  auto size_vec = seq_vec.size();
+  size_t size_seg = size_vec / threadNum;
+
+  std::vector<vector_d> par_vec(threadNum);
+
+  for (size_t i = 0; i < threadNum - 1; ++i)
+    par_vec[i] = {seq_vec.begin() + i * size_seg,
+                  seq_vec.begin() + (i + 1) * size_seg};
+
+  par_vec[threadNum - 1] = {seq_vec.begin() + (threadNum - 1) * size_seg,
+                            seq_vec.end()};
+
+  auto seq_start_t = omp_get_wtime();
+  floatRadixSort(&seq_vec);
+  auto seq_finish_t = omp_get_wtime();
+
+  vector_d result;
+  auto par_start_t = omp_get_wtime();
+  result = floatRadixSortParalel(&par_vec);
+  auto par_finish_t = omp_get_wtime();
+
+  std::cout << "seq = " << seq_finish_t - seq_start_t << std::endl;
+  std::cout << "par = " << par_finish_t - par_start_t << std::endl;
+  std::cout << "boost = "
+            << (seq_finish_t - seq_start_t) / (par_finish_t - par_start_t) << std::endl;
+
+  ASSERT_EQ(seq_vec, result);
 }
 
 int main(int argc, char **argv) {

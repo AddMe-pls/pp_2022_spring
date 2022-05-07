@@ -23,16 +23,16 @@ std::vector<vector_d> genDigitCounters(vector_d* source_vec, size_t elem_num) {
   int index_sv = 0;
   int curr_byte = 0;
 
-  for (size_t byte_num = 0; byte_num < sizeof(double); ++byte_num) {
+  for (size_t byte_num = 0; byte_num < sizeof(double) - 1; ++byte_num) {
     for (size_t elem_ind = 0; elem_ind < elem_num; ++elem_ind) {
       curr_byte = static_cast<int>(
           *((unsigned char*)&(*source_vec)[elem_ind] + byte_num));
       digitCounters[curr_byte].push_back((*source_vec)[elem_ind]);
     }
 
-  size_t count_size = 0;
+    size_t count_size = 0;
     for (size_t i = 0; i < bv; ++i) {
-      if (!digitCounters.empty()) {
+      if (!digitCounters[i].empty()) {
         count_size = digitCounters[i].size();
         for (size_t j = 0; j < count_size; ++j) {
           (*source_vec)[index_sv++] = digitCounters[i][j];
@@ -77,7 +77,7 @@ void floatRadixSort(vector_d* source_vec) {
 
   int count_index = 0;
   for (size_t i = 0; i < elem_num; ++i) {
-    count_index = static_cast<int>(*((unsigned char*)&(*source_vec)[i] + 7));
+    count_index = static_cast<int>(*((unsigned char*)&(*source_vec)[i] + sizeof(double) - 1));
     digitCounters[count_index].push_back((*source_vec)[i]);
   }
 

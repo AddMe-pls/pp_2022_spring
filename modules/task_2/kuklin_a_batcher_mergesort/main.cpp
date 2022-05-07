@@ -164,7 +164,7 @@ TEST(kuklin_a_betcher_mergesort, parallel_sort_faster_sequence) {
 }
 
 TEST(kuklin_a_betcher_mergesort, parallel_sort_faster_sequence_vers) {
-  auto seq_vec = getRandVec(90000000, -100., 100.);
+  auto seq_vec = getRandVec(80000000, -100., 100.);
   auto threadNum = omp_get_num_procs();
   auto size_vec = seq_vec.size();
   size_t size_seg = size_vec / threadNum;
